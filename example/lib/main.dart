@@ -33,84 +33,46 @@ class _MyAppState extends State<MyApp> {
 
             return !allPermissionsGranted
                 ? const Center(
-              child: Text("Error requesting permissions"),
-            )
+                    child: Text("Error requesting permissions"),
+                  )
                 : FutureBuilder<ObjectDetector>(
-              future: _initObjectDetectorWithLocalModel(),
-              builder: (context, snapshot) {
-                final predictor = snapshot.data;
+                    future: _initObjectDetectorWithLocalModel(),
+                    builder: (context, snapshot) {
+                      final predictor = snapshot.data;
 
-                return predictor == null
-                    ? Container()
-                    : Stack(
-                  children: [
-                    UltralyticsYoloCameraPreview(
-                      controller: controller,
-                      predictor: predictor,
-                      onCameraCreated: () {
-                        predictor.loadModel(useGpu: true);
-                      },
-                    ),
-                    StreamBuilder<double?>(
-                      stream: predictor.inferenceTime,
-                      builder: (context, snapshot) {
-                        final inferenceTime = snapshot.data;
+                      return predictor == null
+                          ? Container()
+                          : Stack(
+                              children: [
+                                UltralyticsYoloCameraPreview(
+                                  controller: controller,
+                                  predictor: predictor,
+                                  onCameraCreated: () {
+                                    predictor.loadModel(useGpu: true);
+                                  },
+                                ),
+                                StreamBuilder<double?>(
+                                  stream: predictor.inferenceTime,
+                                  builder: (context, snapshot) {
+                                    final inferenceTime = snapshot.data;
 
-                        return StreamBuilder<double?>(
-                          stream: predictor.fpsRate,
-                          builder: (context, snapshot) {
-                            final fpsRate = snapshot.data;
+                                    return StreamBuilder<double?>(
+                                      stream: predictor.fpsRate,
+                                      builder: (context, snapshot) {
+                                        final fpsRate = snapshot.data;
 
-                            return Times(
-                              inferenceTime: inferenceTime,
-                              fpsRate: fpsRate,
+                                        return Times(
+                                          inferenceTime: inferenceTime,
+                                          fpsRate: fpsRate,
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ],
                             );
-                          },
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            );
-            // : FutureBuilder<ObjectClassifier>(
-            //     future: _initObjectClassifierWithLocalModel(),
-            //     builder: (context, snapshot) {
-            //       final predictor = snapshot.data;
-
-            //       return predictor == null
-            //           ? Container()
-            //           : Stack(
-            //               children: [
-            //                 UltralyticsYoloCameraPreview(
-            //                   controller: controller,
-            //                   predictor: predictor,
-            //                   onCameraCreated: () {
-            //                     predictor.loadModel();
-            //                   },
-            //                 ),
-            //                 StreamBuilder<double?>(
-            //                   stream: predictor.inferenceTime,
-            //                   builder: (context, snapshot) {
-            //                     final inferenceTime = snapshot.data;
-
-            //                     return StreamBuilder<double?>(
-            //                       stream: predictor.fpsRate,
-            //                       builder: (context, snapshot) {
-            //                         final fpsRate = snapshot.data;
-
-            //                         return Times(
-            //                           inferenceTime: inferenceTime,
-            //                           fpsRate: fpsRate,
-            //                         );
-            //                       },
-            //                     );
-            //                   },
-            //                 ),
-            //               ],
-            //             );
-            //     },
-            //   );
+                    },
+                  );
           },
         ),
         floatingActionButton: FloatingActionButton(
@@ -124,49 +86,33 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<ObjectDetector> _initObjectDetectorWithLocalModel() async {
-    // FOR IOS
-    final modelPath = await _copy('assets/yolov8n.mlmodel');
-    final model = LocalYoloModel(
-      id: '',
-      task: Task.detect,
-      format: Format.coreml,
-      modelPath: modelPath,
-    );
-    // FOR ANDROID
-    // final modelPath = await _copy('assets/yolov8n_int8.tflite');
-    // final metadataPath = await _copy('assets/metadata.yaml');
-    // final model = LocalYoloModel(
-    //   id: '',
-    //   task: Task.detect,
-    //   format: Format.tflite,
-    //   modelPath: modelPath,
-    //   metadataPath: metadataPath,
-    // );
+    if (!io.Platform.isIOS && !io.Platform.isAndroid) {
+      throw Exception('Unsupported platform');
+    }
+    late final LocalYoloModel model;
+    if (io.Platform.isIOS) {
+      // FOR IOS
+      final modelPath = await _copy('assets/best.mlmodel');
+      model = LocalYoloModel(
+        id: '',
+        task: Task.detect,
+        format: Format.coreml,
+        modelPath: modelPath,
+      );
+    } else if (io.Platform.isAndroid) {
+      // FOR ANDROID
+      final modelPath = await _copy('assets/best_int8.tflite');
+      final metadataPath = await _copy('assets/dataset.yaml');
+      model = LocalYoloModel(
+        id: '',
+        task: Task.detect,
+        format: Format.tflite,
+        modelPath: modelPath,
+        metadataPath: metadataPath,
+      );
+    }
 
     return ObjectDetector(model: model);
-  }
-
-  Future<ImageClassifier> _initImageClassifierWithLocalModel() async {
-    final modelPath = await _copy('assets/yolov8n-cls.mlmodel');
-    final model = LocalYoloModel(
-      id: '',
-      task: Task.classify,
-      format: Format.coreml,
-      modelPath: modelPath,
-    );
-
-    // final modelPath = await _copy('assets/yolov8n-cls.bin');
-    // final paramPath = await _copy('assets/yolov8n-cls.param');
-    // final metadataPath = await _copy('assets/metadata-cls.yaml');
-    // final model = LocalYoloModel(
-    //   id: '',
-    //   task: Task.classify,
-    //   modelPath: modelPath,
-    //   paramPath: paramPath,
-    //   metadataPath: metadataPath,
-    // );
-
-    return ImageClassifier(model: model);
   }
 
   Future<String> _copy(String assetPath) async {
@@ -175,7 +121,8 @@ class _MyAppState extends State<MyApp> {
     final file = io.File(path);
     if (!await file.exists()) {
       final byteData = await rootBundle.load(assetPath);
-      await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+      await file.writeAsBytes(byteData.buffer
+          .asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
     }
     return file.path;
   }
@@ -193,8 +140,10 @@ class _MyAppState extends State<MyApp> {
       return true;
     } else {
       try {
-        Map<Permission, PermissionStatus> statuses = await permissions.request();
-        return statuses.values.every((status) => status == PermissionStatus.granted);
+        Map<Permission, PermissionStatus> statuses =
+            await permissions.request();
+        return statuses.values
+            .every((status) => status == PermissionStatus.granted);
       } on Exception catch (_) {
         return false;
       }
